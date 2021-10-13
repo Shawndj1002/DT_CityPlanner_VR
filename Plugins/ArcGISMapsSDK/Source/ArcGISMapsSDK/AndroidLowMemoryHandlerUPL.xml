@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--ARToolKit plugin additions-->
+<root xmlns:android="http://schemas.android.com/apk/res/android">
+	<!-- init section is always evaluated once per architecture -->
+	<init>
+		<log text="Platform init"/>
+	</init>
+
+	<!-- Imports required for low memory handler -->
+	<gameActivityImportAdditions>
+		<insert>
+			import android.content.ComponentCallbacks2;
+			import android.app.ActivityManager;
+			import android.content.Context;
+		</insert>
+	</gameActivityImportAdditions>
+
+	<!-- Variables added to GameActivity class -->
+	<gameActivityClassAdditions>
+		<insert>
+			private ComponentCallbacks2 mComponentCallback;
+			private static native void forwardOnTrimEvent(int level);
+
+			private ActivityManager mActivityManager;
+			private ActivityManager.MemoryInfo mMemoryInfo;
+			private static native void updateMemoryAvailabilityNative(long total, long inUse);
+
+			private void updateMemoryAvailability()
+			{
+			mActivityManager.getMemoryInfo(mMemoryInfo);
+			long available = mMemoryInfo.availMem;
+			long total = mMemoryInfo.totalMem;
+			long threshold = mMemoryInfo.threshold;
+			updateMemoryAvailabilityNative(total, total - available - threshold);
+			}
+
+		</insert>
+	</gameActivityClassAdditions>
+
+	<!-- Code additions to GameActivity onCreate in GameActivity.java -->
+	<gameActivityOnCreateAdditions>
+		<insert>
+			mActivityManager = (ActivityManager)this.getSystemService(Context.ACTIVITY_SERVICE);
+			mMemoryInfo = new ActivityManager.MemoryInfo();
+
+			mComponentCallback = new ComponentCallbacks2()
+			{
+			@Override
+			public void onTrimMemory(int level)
+			{
+			// Call unreal code from here using native function declared above
+			if (level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)
+			{
+			forwardOnTrimEvent(level);
+			}
+			}
+
+			@Override
+			public void onConfigurationChanged(Configuration newConfig)
+			{
+			// No-op, interface has to be respected but the application handler handles everything else already
+			}
+
+			@Override
+			public void onLowMemory()
+			{
+			// Call forwardOnTrimEvent here as well with a level value that's not colliding with onTrimMemory
+			forwardOnTrimEvent(42);
+			}
+			};
+		</insert>
+	</gameActivityOnCreateAdditions>
+
+	<gameActivityOnResumeAdditions>
+		<insert>
+			getApplicationContext().registerComponentCallbacks(mComponentCallback);
+			updateMemoryAvailability();
+		</insert>
+	</gameActivityOnResumeAdditions>
+
+	<gameActivityOnPauseAdditions>
+		<insert>
+			getApplicationContext().unregisterComponentCallbacks(mComponentCallback);
+		</insert>
+	</gameActivityOnPauseAdditions>
+</root>
